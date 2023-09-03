@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Квитанция по коммунальным услугам</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.68/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.68/vfs_fonts.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,400i,500,500i,700,700i">
+
+<style>
+    /* Стили для формы и элементов ввода */
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    input[type="number"], input[type="date"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+
+    /* Стили для квитанции */
+    #receipt {
+        border: 1px solid #000;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    /* Стили для кнопки скачивания */
+    .btn-success {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    /* Стили для заголовка */
+    h2 {
+        text-align: center;
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px;
+    }
+</style>
+
+</head>
+<body>
+
+<div class="container mt-5">
+    <h2>Квитанция по коммунальным услугам</h2>
+    <form id="utilityForm">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label for="electricity">Показания счетчика электроэнергии (кВт⋅ч):</label>
+                    <input type="number" class="form-control" id="electricity" name="electricity" required>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label for="water">Показания счетчика воды (м³):</label>
+                    <input type="number" class="form-control" id="water" name="water" required>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label for="gas">Показания счетчика газа (куб. м):</label>
+                    <input type="number" class="form-control" id="gas" name="gas" required>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="billingStartDate">Дата начала периода начисления:</label>
+            <input type="date" class="form-control" id="billingStartDate" name="billingStartDate" required>
+        </div>
+        <div class="form-group">
+            <label for="billingEndDate">Дата окончания периода начисления:</label>
+            <input type="date" class="form-control" id="billingEndDate" name="billingEndDate" required>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="generateReceipt()">Сгенерировать квитанцию</button>
+    </form>
+</div>
+
+<div class="container mt-5">
+    <h2>Квитанция</h2>
+    <!-- Используйте этот элемент для отображения квитанции -->
+    <div id="receipt" class="border p-3">
+        <p class="mb-1">Дата: <span id="currentDate"></span></p>
+        <p class="mb-1">Период начисления: <span id="billingPeriodValue"></span></p>
+        <p class="mb-1">Показания счетчика электроэнергии (кВт⋅ч): <span id="electricityValue"></span></p>
+        <p class="mb-1">Показания счетчика воды (м³): <span id="waterValue"></span></p>
+        <p class="mb-1">Показания счетчика газа (куб. м): <span id="gasValue"></span></p>
+        <p class="mb-1">Сумма за электроэнергию: <span id="electricityCost"></span> руб.</p>
+        <p class="mb-1">Сумма за воду: <span id="waterCost"></span> руб.</p>
+        <p class="mb-1">Сумма за газ: <span id="gasCost"></span> руб.</p>
+        <p class="mb-1">Итоговая сумма: <span id="totalAmount"></span> руб.</p>
+        <button type="button" class="btn btn-success" onclick="downloadReceipt()">Скачать квитанцию</button>
+    </div>
+</div>
+
+<script>
+    let pdfDataUri; // Переменная для хранения данных PDF
+    let electricityReading, waterReading, gasReading, electricityCost, waterCost, gasCost, totalAmount;
+
+    $(document).ready(function () {
+        // Получаем текущую дату
+        const currentDate = new Date().toLocaleDateString();
+        document.getElementById('currentDate').textContent = currentDate;
+
+        // Инициализация datepicker
+        $('#billingStartDate, #billingEndDate').datepicker({
+            format: "yyyy-mm-dd",
+            autoclose: true
+        });
+    });
+
+    function generateReceipt() {
+        // Получаем данные из формы
+        electricityReading = parseFloat(document.getElementById('electricity').value);
+        waterReading = parseFloat(document.getElementById('water').value);
+        gasReading = parseFloat(document.getElementById('gas').value);
+        const billingStartDate = document.getElementById('billingStartDate').value;
+        const billingEndDate = document.getElementById('billingEndDate').value;
+        const billingPeriod = `${billingStartDate} по ${billingEndDate}`;
+
+        // Вычисляем стоимость электроэнергии
+        if (electricityReading <= 150) {
+            electricityCost = electricityReading * 1.87;
+        } else {
+            electricityCost = 150 * 1.87 + (electricityReading - 150) * 2.54;
+        }
+
+        // Вычисляем стоимость воды
+        waterCost = waterReading * 43.95; // Тариф за услуги централизованного водоснабжения
+
+        // Вычисляем стоимость газа
+        if (gasReading <= 2500) {
+            gasCost = gasReading * 3.29;
+        } else if (gasReading <= 6000) {
+            gasCost = gasReading * 3.03;
+        } else {
+            gasCost = gasReading * 4.96;
+        }
+
+        // Вычисляем общую сумму
+        totalAmount = electricityCost + waterCost + gasCost;
+
+        // Отображаем данные квитанции на странице
+        document.getElementById('billingPeriodValue').textContent = billingPeriod;
+        document.getElementById('electricityValue').textContent = electricityReading;
+        document.getElementById('waterValue').textContent = waterReading;
+        document.getElementById('gasValue').textContent = gasReading;
+        document.getElementById('electricityCost').textContent = electricityCost.toFixed(2);
+        document.getElementById('waterCost').textContent = waterCost.toFixed(2);
+        document.getElementById('gasCost').textContent = gasCost.toFixed(2);
+        document.getElementById('totalAmount').textContent = totalAmount.toFixed(2);
+    }
+
+    function downloadReceipt() {
+        if (electricityReading !== undefined && waterReading !== undefined && gasReading !== undefined) {
+            // Создаем PDF документ с использованием pdfmake
+            const documentDefinition = {
+                content: [
+                    { text: 'Квитанция по коммунальным услугам', style: 'header' },
+                    { text: `Дата: ${document.getElementById('currentDate').textContent}` },
+                    { text: `Период начисления: ${document.getElementById('billingPeriodValue').textContent}` },
+                    { text: `Показания счетчика электроэнергии (кВт⋅ч): ${electricityReading}` },
+                    { text: `Показания счетчика воды (м³): ${waterReading}` },
+                    { text: `Показания счетчика газа (куб. м): ${gasReading}` },
+                    { text: `Сумма за электроэнергию: ${electricityCost.toFixed(2)} руб.` },
+                    { text: `Сумма за воду: ${waterCost.toFixed(2)} руб.` },
+                    { text: `Сумма за газ: ${gasCost.toFixed(2)} руб.` },
+                    { text: `Итоговая сумма: ${totalAmount.toFixed(2)} руб.` },
+                ],
+                styles: {
+                    header: {
+                        fontSize: 18,
+                        bold: true,
+                        alignment: 'center',
+                        margin: [0, 0, 0, 20],
+                    },
+                },
+                defaultStyle: {
+                    font: 'Roboto',
+                },
+            };
+
+            pdfMake.createPdf(documentDefinition).download('kvitanciya.pdf');
+        } else {
+            alert('Сначала сгенерируйте квитанцию, нажав кнопку "Сгенерировать квитанцию".');
+        }
+    }
+</script>
+
+</body>
+</html>
